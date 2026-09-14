@@ -118,16 +118,54 @@ function validate(surahs, ayat) {
   return problems;
 }
 
-const chunk = (arr, size) => {
+/**
+ * Режем вставку по ОБЪЁМУ, а не по числу строк: D1 отбивает слишком длинный
+ * SQL-запрос ошибкой SQLITE_TOOBIG. Аяты сильно разного размера, поэтому
+ * фиксированное число строк даёт запросы то по 10 КБ, то по 100 КБ.
+ */
+const MAX_STATEMENT_BYTES = 30_000;
+
+const chunkByBytes = (rows, maxBytes = MAX_STATEMENT_BYTES) => {
   const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  let cur = [];
+  let size = 0;
+  for (const row of rows) {
+    const n = Buffer.byteLength(row, "utf8") + 2; // +2 на «,\n»
+    if (cur.length && size + n > maxBytes) {
+      out.push(cur);
+      cur = [];
+      size = 0;
+    }
+    cur.push(row);
+    size += n;
+  }
+  if (cur.length) out.push(cur);
   return out;
 };
 
-(async () => {
+/**
+ * Скачанное складываем в seed/quran-raw.json. Сеть — самая долгая часть, и
+ * перегенерировать SQL из сырых данных нужно чаще, чем перекачивать их.
+ * Принудительно перекачать: --refetch
+ */
+const RAW = "seed/quran-raw.json";
+
+async function load() {
+  if (!argv.includes("--refetch") && fs.existsSync(RAW)) {
+    const raw = JSON.parse(fs.readFileSync(RAW, "utf8"));
+    console.log(`Беру скачанное ранее: ${RAW} (--refetch, чтобы обновить)`);
+    return raw;
+  }
   console.log(`Источник: ${API}`);
   const surahs = await fetchSurahs();
   const ayat = await fetchAyat();
+  fs.mkdirSync(path.dirname(RAW), { recursive: true });
+  fs.writeFileSync(RAW, JSON.stringify({ surahs, ayat }), "utf8");
+  return { surahs, ayat };
+}
+
+(async () => {
+  const { surahs, ayat } = await load();
 
   const problems = validate(surahs, ayat);
   if (problems.length) {
@@ -145,17 +183,16 @@ const chunk = (arr, size) => {
     "DELETE FROM surahs;",
   ];
 
-  for (const batch of chunk(surahs, 50)) {
+  const surahRows = surahs.map(
+    (s) =>
+      `(${s.id},${q(s.name_ar)},${q(s.name_ru)},${s.ayah_count},${q(
+        s.revelation
+      )},${s.page_start})`
+  );
+  for (const batch of chunkByBytes(surahRows)) {
     lines.push(
       "INSERT INTO surahs (id,name_ar,name_ru,ayah_count,revelation,page_start) VALUES\n" +
-        batch
-          .map(
-            (s) =>
-              `(${s.id},${q(s.name_ar)},${q(s.name_ru)},${s.ayah_count},${q(
-                s.revelation
-              )},${s.page_start})`
-          )
-          .join(",\n") +
+        batch.join(",\n") +
         ";"
     );
   }
@@ -167,7 +204,7 @@ const chunk = (arr, size) => {
       a.uthmani
     )},${q(a.plain)})`;
   });
-  for (const batch of chunk(rows, 200)) {
+  for (const batch of chunkByBytes(rows)) {
     lines.push(
       "INSERT INTO ayat (n,surah,ayah,page,juz,hizb,text_uthmani,text_plain) VALUES\n" +
         batch.join(",\n") +
@@ -179,6 +216,11 @@ const chunk = (arr, size) => {
   fs.writeFileSync(OUT, lines.join("\n") + "\n", "utf8");
 
   const mb = (fs.statSync(OUT).size / 1024 / 1024).toFixed(1);
-  console.log(`✅ ${OUT} — ${ayat.length} аятов, ${surahs.length} сур, ${mb} МБ`);
+  const statements = lines.filter((l) => l.startsWith("INSERT")).length;
+  const longest = Math.max(...lines.map((l) => Buffer.byteLength(l, "utf8")));
+  console.log(
+    `✅ ${OUT} — ${ayat.length} аятов, ${surahs.length} сур, ${mb} МБ\n` +
+      `   запросов INSERT: ${statements}, самый длинный: ${(longest / 1024).toFixed(1)} КБ`
+  );
   console.log("   Дальше:  npm run quran:load");
 })();
