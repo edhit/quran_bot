@@ -1,0 +1,45 @@
+name = "quran-bot"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Планировщик: каждые 15 минут смотрим, у кого наступил час утреннего плана
+# или вечерней проверки (у каждого пользователя свой часовой пояс).
+[triggers]
+crons = ["*/15 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "quran-bot"
+database_id = "ЗАМЕНИ_НА_СВОЙ_ID"   # npm run db:create выведет его
+
+# Workers AI — распознавание речи (Whisper). Бесплатная квота есть даже на Free-плане.
+[ai]
+binding = "AI"
+
+[vars]
+# --- Claude ---
+CLAUDE_MODEL = "claude-opus-5"
+# "low" | "medium" | "high" | "xhigh" | "max". Ниже = дешевле.
+CLAUDE_EFFORT = "high"
+
+# --- Распознавание речи ---
+WHISPER_MODEL = "@cf/openai/whisper-large-v3-turbo"
+
+# --- Аудио (everyayah.com). Папку чтеца проверь командой /reciter ---
+RECITER = "Husary_128kbps"
+
+# --- Источники перевода и тафсира (quran.com API v4).
+# Точные id узнай командой /sources — бот выведет список доступных на русском. ---
+QURAN_API_BASE = "https://api.quran.com/api/v4"
+TRANSLATION_ID = "45"
+TAFSIR_ID = "170"
+
+# Кому слать еженедельный отчёт (мухасаба-партнёр). Пусто = никому.
+PARTNER_CHAT_ID = ""
+
+# Секреты (wrangler secret put ...):
+#   TELEGRAM_TOKEN
+#   TELEGRAM_WEBHOOK_SECRET
+#   ANTHROPIC_API_KEY
+#   OWNER_ID   — твой telegram id, чтобы ботом не пользовались посторонние
