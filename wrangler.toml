@@ -10,7 +10,7 @@ crons = ["*/15 * * * *"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "quran-bot"
+database_name = "quran-hifz"
 database_id = "ЗАМЕНИ_НА_СВОЙ_ID"   # npm run db:create выведет его
 
 # Workers AI — распознавание речи (Whisper). Бесплатная квота есть даже на Free-плане.
