@@ -1,0 +1,39 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          secrets: |
+            BOT_TOKEN
+            WEBHOOK_SECRET
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+
+      - name: Set Telegram webhook and commands
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          curl -sS "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=${URL}" \
+            --data-urlencode "secret_token=${WEBHOOK_SECRET}"
+          curl -sS "https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands" \
+            -H "content-type: application/json" \
+            -d '{"commands":[{"command":"next","description":"Следующий аят"},{"command":"today","description":"Повторить текущий"},{"command":"time","description":"Час отправки"},{"command":"tz","description":"Часовой пояс"},{"command":"stop","description":"Отписаться"}]}'

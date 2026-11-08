@@ -1,0 +1,10 @@
+name = "quran-daily-bot"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[triggers]
+crons = ["0 * * * *"]
+
+# Wrangler 4 сам создаст это хранилище при первом деплое
+[[kv_namespaces]]
+binding = "KV"
